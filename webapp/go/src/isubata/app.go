@@ -370,17 +370,10 @@ func getUsers(q sqlx.Queryer, userIDs []int64) (map[int64]User, error) {
 	return usersMap, nil
 }
 
-func jsonifyMessage(m Message) (map[string]interface{}, error) {
-	u := User{}
-	err := db.Get(&u, "SELECT name, display_name, avatar_icon FROM user WHERE id = ?",
-		m.UserID)
-	if err != nil {
-		return nil, err
-	}
-
+func jsonifyMessage(m Message, user User) (map[string]interface{}, error) {
 	r := make(map[string]interface{})
 	r["id"] = m.ID
-	r["user"] = u
+	r["user"] = user
 	r["date"] = m.CreatedAt.Format("2006/01/02 15:04:05")
 	r["content"] = m.Content
 	return r, nil
@@ -435,11 +428,11 @@ func getMessage(c echo.Context) error {
 			return err
 		}
 
-		r := make(map[string]interface{})
-		r["id"] = m.ID
-		r["user"] = user
-		r["date"] = m.CreatedAt.Format("2006/01/02 15:04:05")
-		r["content"] = m.Content
+		r, err := jsonifyMessage(m, user)
+		if err != nil {
+			return err
+		}
+
 		response = append(response, r)
 	}
 
@@ -638,13 +631,34 @@ func getHistory(c echo.Context) error {
 		return err
 	}
 
+	var userIDs []int64
+	for _, m := range messages {
+		userIDs = append(userIDs, m.UserID)
+	}
+
+	uniqUserIDs, err := uniq(userIDs)
+	if err != nil {
+		return err
+	}
+
 	mjson := make([]map[string]interface{}, 0)
-	for i := len(messages) - 1; i >= 0; i-- {
-		r, err := jsonifyMessage(messages[i])
+
+	if len(uniqUserIDs) > 0 {
+		usersMap, err := getUsers(db, uniqUserIDs)
 		if err != nil {
 			return err
 		}
-		mjson = append(mjson, r)
+		for i := len(messages) - 1; i >= 0; i-- {
+			user, ok := usersMap[messages[i].UserID]
+			if !ok {
+				return err
+			}
+			r, err := jsonifyMessage(messages[i], user)
+			if err != nil {
+				return err
+			}
+			mjson = append(mjson, r)
+		}
 	}
 
 	channels := []ChannelInfo{}
