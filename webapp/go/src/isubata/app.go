@@ -406,6 +406,13 @@ func getMessage(c echo.Context) error {
 		return err
 	}
 
+	response := make([]map[string]interface{}, 0)
+
+	// メッセージが空の時点で打ち切る
+	if len(messages) == 0 {
+		return c.JSON(http.StatusOK, response)
+	}
+
 	var userIDs []int64
 	for _, m := range messages {
 		userIDs = append(userIDs, m.UserID)
@@ -415,8 +422,6 @@ func getMessage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-
-	response := make([]map[string]interface{}, 0)
 
 	usersMap, err := getUsers(db, uniqUserIDs)
 	if err != nil {
