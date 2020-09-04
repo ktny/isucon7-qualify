@@ -477,19 +477,36 @@ func fetchUnread(c echo.Context) error {
 	resp := []map[string]interface{}{}
 
 	channelLastMessageId, err := queryHaveReads(db, userID, channels)
+	if err != nil {
+		return err
+	}
+
+	messageIdsByChannel, err := queryMessageIdsByChannel(db, channels)
+	if err != nil {
+		return err
+	}
 
 	for _, chID := range channels {
-		lastID, ok := channelLastMessageId[chID]
+		lastID, existsLastId := channelLastMessageId[chID]
+		messageIDs, existsMessage := messageIdsByChannel[chID]
 		var cnt int64
-		if ok {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
-				chID, lastID)
+
+		if !existsMessage {
+			cnt = 0
 		} else {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
-				chID)
+			if !existsLastId {
+				for _, _ = range messageIDs {
+					cnt += 1
+				}
+			} else {
+				for _, mid := range messageIDs {
+					if lastID < mid {
+						cnt += 1
+					}
+				}
+			}
 		}
+
 		if err != nil {
 			return err
 		}
@@ -500,6 +517,34 @@ func fetchUnread(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+func queryMessageIdsByChannel(q sqlx.Queryer, channelIDs []int64) (map[int64][]int64, error) {
+	query, args, err := sqlx.In("select id, channel_id from message where channel_id in (?)", channelIDs)
+
+	type Message struct {
+		ID        int64 `db:"id"`
+		ChannelID int64 `db:"channel_id"`
+	}
+
+	messages := []Message{}
+	err = sqlx.Select(q, &messages, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	messageIdsByChannel := make(map[int64][]int64, len(channelIDs))
+	for _, m := range messages {
+		_, ok := messageIdsByChannel[m.ChannelID]
+		if ok {
+			messageIdsByChannel[m.ChannelID] = append(messageIdsByChannel[m.ChannelID], m.ID)
+		} else {
+			list := []int64{m.ID}
+			messageIdsByChannel[m.ChannelID] = list
+		}
+	}
+
+	return messageIdsByChannel, nil
 }
 
 func getHistory(c echo.Context) error {
