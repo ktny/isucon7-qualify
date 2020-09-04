@@ -415,6 +415,31 @@ func queryChannels() ([]int64, error) {
 	return res, err
 }
 
+func queryHaveReads(q sqlx.Queryer, userID int64, channelIDs []int64) (map[int64]int64, error) {
+	query, args, err := sqlx.In("SELECT channel_id, message_id FROM haveread WHERE user_id = ? AND channel_id IN (?)", userID, channelIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	type HaveRead struct {
+		ChannelID int64 `db:"channel_id"`
+		MessageID int64 `db:"message_id"`
+	}
+
+	haveReads := []HaveRead{}
+	err = sqlx.Select(q, &haveReads, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	channelLastMessageId := make(map[int64]int64, len(channelIDs))
+	for _, h := range haveReads {
+		channelLastMessageId[h.ChannelID] = h.MessageID
+	}
+
+	return channelLastMessageId, nil
+}
+
 func queryHaveRead(userID, chID int64) (int64, error) {
 	type HaveRead struct {
 		UserID    int64     `db:"user_id"`
@@ -451,14 +476,12 @@ func fetchUnread(c echo.Context) error {
 
 	resp := []map[string]interface{}{}
 
-	for _, chID := range channels {
-		lastID, err := queryHaveRead(userID, chID)
-		if err != nil {
-			return err
-		}
+	channelLastMessageId, err := queryHaveReads(db, userID, channels)
 
+	for _, chID := range channels {
+		lastID, ok := channelLastMessageId[chID]
 		var cnt int64
-		if lastID > 0 {
+		if ok {
 			err = db.Get(&cnt,
 				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
 				chID, lastID)
