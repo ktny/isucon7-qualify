@@ -350,6 +350,26 @@ func postMessage(c echo.Context) error {
 	return c.NoContent(204)
 }
 
+func getUsers(q sqlx.Queryer, userIDs []int64) (map[int64]User, error) {
+	query, args, err := sqlx.In("select id, name, display_name, avatar_icon from user where id in (?)", userIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	users := []User{}
+	err = sqlx.Select(q, &users, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	usersMap := make(map[int64]User, len(users))
+	for _, u := range users {
+		usersMap[u.ID] = u
+	}
+
+	return usersMap, nil
+}
+
 func jsonifyMessage(m Message) (map[string]interface{}, error) {
 	u := User{}
 	err := db.Get(&u, "SELECT name, display_name, avatar_icon FROM user WHERE id = ?",
@@ -386,13 +406,35 @@ func getMessage(c echo.Context) error {
 		return err
 	}
 
+	var userIDs []int64
+	for _, m := range messages {
+		userIDs = append(userIDs, m.UserID)
+	}
+
+	uniqUserIDs, err := uniq(userIDs)
+	if err != nil {
+		return err
+	}
+
 	response := make([]map[string]interface{}, 0)
+
+	usersMap, err := getUsers(db, uniqUserIDs)
+	if err != nil {
+		return err
+	}
+
 	for i := len(messages) - 1; i >= 0; i-- {
 		m := messages[i]
-		r, err := jsonifyMessage(m)
-		if err != nil {
+		user, ok := usersMap[m.UserID]
+		if !ok {
 			return err
 		}
+
+		r := make(map[string]interface{})
+		r["id"] = m.ID
+		r["user"] = user
+		r["date"] = m.CreatedAt.Format("2006/01/02 15:04:05")
+		r["content"] = m.Content
 		response = append(response, r)
 	}
 
