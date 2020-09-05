@@ -845,17 +845,25 @@ func getIcon(c echo.Context) error {
 		return echo.ErrNotFound
 	}
 
-	log.Println(iconPath(name))
+	// filePath := iconPath(name)
 
-	if err := ioutil.WriteFile(iconPath(name), data, 0644); err != nil {
-		log.Println(iconPath(name))
-		return err
-	}
+	// log.Println(filePath)
+
+	// dst, err := os.Create(filePath)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer dst.Close()
+
+	// if err := ioutil.WriteFile(iconPath(name), data, 0644); err != nil {
+	// 	// log.Println(iconPath(name))
+	// 	return err
+	// }
 	return c.Blob(http.StatusOK, mime, data)
 }
 
 func iconPath(name string) string {
-	return fmt.Sprintf("../public/icons/%s", name)
+	return fmt.Sprintf("%s", name)
 }
 
 func tAdd(a, b int64) int64 {
