@@ -759,7 +759,8 @@ func postProfile(c echo.Context) error {
 	avatarName := ""
 	var avatarData []byte
 
-	if fh, err := c.FormFile("avatar_icon"); err == http.ErrMissingFile {
+	fh, err := c.FormFile("avatar_icon")
+	if err == http.ErrMissingFile {
 		// no file upload
 	} else if err != nil {
 		return err
@@ -790,9 +791,18 @@ func postProfile(c echo.Context) error {
 		avatarName = fmt.Sprintf("%x%s", sha1.Sum(avatarData), ext)
 	}
 
-	if avatarName != "" && len(avatarData) > 0 {
-		_, err := db.Exec("INSERT INTO image (name, data) VALUES (?, ?)", avatarName, avatarData)
+	if avatarName != "" {
+		dst, err := os.Create(iconPath(avatarName))
 		if err != nil {
+			return err
+		}
+		defer dst.Close()
+		f, err := fh.Open()
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if _, err := io.Copy(dst, f); err != nil {
 			return err
 		}
 		_, err = db.Exec("UPDATE user SET avatar_icon = ? WHERE id = ?", avatarName, self.ID)
@@ -834,7 +844,18 @@ func getIcon(c echo.Context) error {
 	default:
 		return echo.ErrNotFound
 	}
+
+	log.Println(iconPath(name))
+
+	if err := ioutil.WriteFile(iconPath(name), data, 0644); err != nil {
+		log.Println(iconPath(name))
+		return err
+	}
 	return c.Blob(http.StatusOK, mime, data)
+}
+
+func iconPath(name string) string {
+	return fmt.Sprintf("../public/icons/%s", name)
 }
 
 func tAdd(a, b int64) int64 {
