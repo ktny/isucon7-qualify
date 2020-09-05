@@ -81,6 +81,11 @@ func init() {
 	db.SetMaxOpenConns(20)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	log.Printf("Succeeded to connect db.")
+
+	// iconディレクトリ作成
+	if err := os.MkdirAll("../public/icons", 0777); err != nil {
+		fmt.Println(err)
+	}
 }
 
 type User struct {
@@ -845,25 +850,14 @@ func getIcon(c echo.Context) error {
 		return echo.ErrNotFound
 	}
 
-	// filePath := iconPath(name)
-
-	// log.Println(filePath)
-
-	// dst, err := os.Create(filePath)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer dst.Close()
-
-	// if err := ioutil.WriteFile(iconPath(name), data, 0644); err != nil {
-	// 	// log.Println(iconPath(name))
-	// 	return err
-	// }
+	if err := ioutil.WriteFile(iconPath(name), data, 0777); err != nil {
+		return err
+	}
 	return c.Blob(http.StatusOK, mime, data)
 }
 
 func iconPath(name string) string {
-	return fmt.Sprintf("%s", name)
+	return fmt.Sprintf("../public/icons/%s", name)
 }
 
 func tAdd(a, b int64) int64 {
